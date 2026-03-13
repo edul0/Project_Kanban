@@ -1,49 +1,64 @@
-// === IDENTIDADE DINÂMICA ===
-let currentUser = localStorage.getItem('kanban_user') || 'github';
-let currentUserAvatar = '';
+// CONFIGURAÇÕES DO SUPABASE (Use os dados do seu projeto)
+const SUPABASE_URL = 'https://tuansquxjvbalzxnfglz.supabase.co';
+const SUPABASE_KEY = 'COLE_AQUI_A_SUA_ANON_KEY'; // Aquela chave eyJ...
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const GITHUB_USER = localStorage.getItem('kanban_user') || 'edul0';
+let currentUserAvatar = '';
+let boardState = [];
+
+// === 1. SINCRONIZAÇÃO EM TEMPO REAL ===
+async function initRealtime() {
+    console.log("Iniciando conexão com banco...");
+    
+    // Busca dados iniciais da linha 1 (que você criou no banco)
+    const { data, error } = await _supabase
+        .from('kanban_data')
+        .select('state')
+        .eq('id', 1)
+        .single();
+
+    if (data) {
+        boardState = data.state;
+        renderBoard();
+    } else {
+        console.error("Erro ao carregar dados iniciais. Verifique se existe uma linha com ID 1 no banco.", error);
+    }
+
+    // Escuta mudanças em tempo real
+    _supabase
+        .channel('kanban-realtime')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data' }, payload => {
+            console.log("Mudança recebida em tempo real!");
+            boardState = payload.new.state;
+            renderBoard();
+        })
+        .subscribe();
+}
+
+async function save() {
+    const { error } = await _supabase
+        .from('kanban_data')
+        .update({ state: boardState })
+        .eq('id', 1);
+    
+    if (error) console.error("Erro ao salvar no banco:", error);
+}
+
+// === 2. LÓGICA DO GITHUB ===
 async function fetchUserProfile(username) {
     try {
-        const response = await fetch(`https://api.github.com/users/${username}`);
-        const data = await response.json();
-        
-        if (data.message === "Not Found") throw new Error();
-        
+        const res = await fetch(`https://api.github.com/users/${username}`);
+        const data = await res.json();
         currentUserAvatar = data.avatar_url;
-        localStorage.setItem('kanban_user', username);
-        
         document.getElementById('user-profile').innerHTML = `
-            <img src="${currentUserAvatar}" alt="Avatar">
-            <div style="display:flex; flex-direction:column">
-                <span style="font-size:12px">Logado como:</span>
-                <span>${data.name || data.login}</span>
-            </div>
+            <img src="${currentUserAvatar}" style="width:32px;border-radius:50%">
+            <span>${data.name || data.login} | Workspace</span>
         `;
-        renderBoard();
-    } catch (e) {
-        const novo = prompt("Usuário GitHub inválido. Digite seu @ novamente:");
-        if (novo) fetchUserProfile(novo);
-    }
+    } catch(e) { console.error("Erro GitHub"); }
 }
 
-function changeUser() {
-    const user = prompt("Digite seu @ do GitHub:");
-    if (user) fetchUserProfile(user);
-}
-
-// === DADOS E PERSISTÊNCIA ===
-let boardState = JSON.parse(localStorage.getItem('kanban_pro_data')) || [
-    { id: "todo", title: "Para fazer", cards: [] },
-    { id: "doing", title: "Em curso", cards: [] },
-    { id: "done", title: "Concluído", cards: [] }
-];
-
-const save = () => localStorage.setItem('kanban_pro_data', JSON.stringify(boardState));
-
-// === DRAG AND DROP ===
-function handleDragStart(e) { e.dataTransfer.setData("text", e.target.id); }
-function handleDragOver(e) { e.preventDefault(); }
-
+// === 3. CORE DO KANBAN ===
 function handleDrop(e) {
     e.preventDefault();
     const cardId = e.dataTransfer.getData("text");
@@ -60,60 +75,37 @@ function moveCard(cardId, targetColId) {
     const dest = boardState.find(c => c.id === targetColId);
     if (dest && card) {
         dest.cards.push(card);
-        save();
         renderBoard();
+        save(); // Sincroniza com a nuvem
     }
 }
 
-// === CRUD ===
 function addCard(colId) {
     const val = prompt("O que precisa ser feito?");
     if (!val) return;
-    
     boardState.find(c => c.id === colId).cards.push({
         id: crypto.randomUUID(),
         content: val,
-        authorAvatar: currentUserAvatar // Carimba a foto do autor no card
+        authorAvatar: currentUserAvatar
     });
-    
-    save();
     renderBoard();
+    save(); // Sincroniza com a nuvem
 }
 
-function deleteCard(cardId) {
-    if (confirm("Deseja excluir esta tarefa?")) {
-        boardState.forEach(col => col.cards = col.cards.filter(c => c.id !== cardId));
-        save();
-        renderBoard();
-    }
-}
-
-function shareBoard() {
-    const data = btoa(JSON.stringify(boardState));
-    const url = new URL(window.location.href);
-    url.searchParams.set('share', data);
-    navigator.clipboard.writeText(url.href);
-    alert("Link de colaboração copiado! Quem abrir este link verá seus cards.");
-}
-
-// === RENDERIZAÇÃO ===
 function renderBoard() {
     const board = document.getElementById('kanban-board');
     if (!board) return;
-    
     board.innerHTML = boardState.map(col => `
         <div class="column">
             <div class="column-header">
-                <div style="font-size: 11px; opacity: 0.6; margin-bottom:5px">${col.title.toUpperCase()}</div>
-                <div style="font-size: 22px;">${col.cards.length}</div>
+                <div style="font-size: 11px; opacity: 0.6;">${col.title.toUpperCase()}</div>
+                <div style="font-size: 24px;">${col.cards.length}</div>
             </div>
-            <div class="card-list" id="${col.id}" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+            <div class="card-list" id="${col.id}" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
                 ${col.cards.map(card => `
-                    <div class="card" id="${card.id}" draggable="true" ondragstart="handleDragStart(event)" ondblclick="deleteCard('${card.id}')">
-                        <div style="font-size: 14px; line-height: 1.5;">${card.content}</div>
-                        <div class="card-footer">
-                            <img src="${card.authorAvatar || 'https://via.placeholder.com/20'}" class="card-avatar" title="Atribuído a este autor">
-                        </div>
+                    <div class="card" id="${card.id}" draggable="true" ondragstart="e => e.dataTransfer.setData('text', e.target.id)">
+                        ${card.content}
+                        <div class="card-footer"><img src="${card.authorAvatar}" style="width:20px;border-radius:50%"></div>
                     </div>
                 `).join('')}
             </div>
@@ -122,18 +114,7 @@ function renderBoard() {
     `).join('');
 }
 
-// === INICIALIZAÇÃO ===
 document.addEventListener('DOMContentLoaded', () => {
-    fetchUserProfile(currentUser);
-    
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('share')) {
-        try {
-            boardState = JSON.parse(atob(params.get('share')));
-            save();
-            window.history.replaceState({}, '', window.location.pathname);
-        } catch(e) { console.error("Erro ao importar board compartilhado"); }
-    }
-    
-    renderBoard();
+    fetchUserProfile(GITHUB_USER);
+    initRealtime();
 });
