@@ -17,7 +17,7 @@ async function start() {
 
 function renderLanding() {
     document.getElementById('app-container').innerHTML = `
-        <div style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:monospace;">
+        <div style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif;">
             <img src="marca.png" width="100">
             <h1 style="font-size:3.5rem; margin:15px 0;">KSpace /</h1>
             <input type="text" id="sala-in" placeholder="nome-da-sala" style="font-size:1.8rem; text-align:center; border:none; border-bottom:4px solid #000; outline:none; width:280px;">
@@ -30,7 +30,7 @@ function renderSkeleton() {
         <header>
             <div class="header-left">
                 <img src="marca.png" class="logo" onclick="window.location.href='index.html'">
-                <img src="${user.avatar}" style="width:28px; border-radius:50%; border:1px solid #000;">
+                <img src="${user.avatar}" style="width:30px; border-radius:50%; border:1px solid #000;">
                 <b style="font-size:13px;">${ROOM}</b>
             </div>
             <button onclick="share()" style="background:#000; color:#fff; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">🔗 COMPARTILHAR</button>
@@ -81,7 +81,7 @@ async function save(msg) {
 async function addCard(cid) {
     const t = prompt("Tarefa:"); if(!t) return;
     state.find(x => x.id === cid).cards.push({ id: crypto.randomUUID(), content: t });
-    renderBoard(); await save(`@${user.name} adicionou: ${t}`);
+    renderBoard(); await save(`@${user.name} adicionou card`);
 }
 
 async function addImg(id) {
