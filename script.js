@@ -10,7 +10,7 @@ let activityLogs = [];
 async function initRealtime() {
     const { data } = await _supabase.from('kanban_data').select('state, logs').eq('id', 1).single();
     if (data) { 
-        boardState = data.state; 
+        boardState = data.state || []; 
         activityLogs = data.logs || [];
         renderBoard(); 
         renderLogs();
@@ -27,7 +27,7 @@ async function initRealtime() {
 
 async function save(logMsg) {
     if (logMsg) activityLogs.unshift({ msg: logMsg, time: new Date().toLocaleTimeString() });
-    if (activityLogs.length > 20) activityLogs.pop(); // Mantém só os últimos 20
+    if (activityLogs.length > 25) activityLogs.pop();
     await _supabase.from('kanban_data').update({ state: boardState, logs: activityLogs }).eq('id', 1);
 }
 
@@ -43,21 +43,41 @@ async function fetchUserProfile(username) {
 async function addCard(colId) {
     const content = prompt("Tarefa:"); if (!content) return;
     const p = prompt("Prioridade: 1-Alta, 2-Média, 3-Baixa");
-    const date = prompt("Data entrega (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
+    const date = prompt("Prazo (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
     const prios = {"1":"prio-alta", "2":"prio-media", "3":"prio-baixa"};
     
-    const newCard = {
+    boardState.find(c => c.id === colId).cards.push({
         id: crypto.randomUUID(),
         content: content,
         priorityClass: prios[p] || "prio-baixa",
         deadline: date,
         owner: currentUser.login,
-        ownerAvatar: currentUser.avatar
-    };
-
-    boardState.find(c => c.id === colId).cards.push(newCard);
+        ownerAvatar: currentUser.avatar,
+        checklist: []
+    });
     renderBoard(); 
-    await save(`@${currentUser.login} criou "${content}"`);
+    await save(`@${currentUser.login} criou: ${content}`);
+}
+
+async function addCheckItem(cardId) {
+    const item = prompt("Subtarefa:");
+    if(!item) return;
+    boardState.forEach(col => {
+        const card = col.cards.find(c => c.id === cardId);
+        if(card) card.checklist.push({ id: crypto.randomUUID(), text: item, done: false });
+    });
+    renderBoard(); await save();
+}
+
+async function toggleCheck(cardId, itemId) {
+    boardState.forEach(col => {
+        const card = col.cards.find(c => c.id === cardId);
+        if(card) {
+            const it = card.checklist.find(i => i.id === itemId);
+            if(it) it.done = !it.done;
+        }
+    });
+    renderBoard(); await save();
 }
 
 async function takeTask(cardId) {
@@ -71,6 +91,7 @@ async function takeTask(cardId) {
 
 function renderBoard() {
     const board = document.getElementById('kanban-board');
+    if (!board || boardState.length === 0) return;
     const search = document.getElementById('board-search').value.toLowerCase();
     const today = new Date().toISOString().split('T')[0];
 
@@ -81,8 +102,18 @@ function renderBoard() {
             <div class="column-header">${col.title} (${filtered.length})</div>
             <div class="card-list" ondragover="event.preventDefault()" ondrop="drop(event, '${col.id}')">
                 ${filtered.map(card => `
-                    <div class="card ${card.priorityClass}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
+                    <div class="card ${card.priorityClass} ${card.owner === currentUser.login ? 'is-mine' : ''}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
                         <div class="card-content">${card.content}</div>
+                        
+                        <div class="checklist-container">
+                            ${card.checklist.map(i => `
+                                <div class="checklist-item ${i.done ? 'done' : ''}" onclick="toggleCheck('${card.id}', '${i.id}')">
+                                    ${i.done ? '✅' : '⬜'} ${i.text}
+                                </div>
+                            `).join('')}
+                            <div style="cursor:pointer; color:var(--primary); margin-top:5px" onclick="addCheckItem('${card.id}')">+ subtarefa</div>
+                        </div>
+
                         <div class="card-footer">
                             <span class="${card.deadline < today && col.id !== 'done' ? 'deadline-alert' : ''}">📅 ${card.deadline}</span>
                             <div class="owner-badge" onclick="takeTask('${card.id}')">
@@ -97,9 +128,8 @@ function renderBoard() {
 }
 
 function renderLogs() {
-    document.getElementById('log-content').innerHTML = activityLogs.map(l => `
-        <div class="log-entry"><strong>[${l.time}]</strong> ${l.msg}</div>
-    `).join('');
+    const logDiv = document.getElementById('log-content');
+    if (logDiv) logDiv.innerHTML = activityLogs.map(l => `<div class="log-entry"><strong>[${l.time}]</strong> ${l.msg}</div>`).join('');
 }
 
 function drag(e) { e.dataTransfer.setData("text", e.target.id); }
@@ -117,7 +147,7 @@ async function drop(e, colId) {
     }
 }
 
-async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(col => col.cards = col.cards.filter(c => c.id !== id)); renderBoard(); await save(`@${currentUser.login} deletou um card`); } }
+async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(col => col.cards = col.cards.filter(c => c.id !== id)); renderBoard(); await save(`@${currentUser.login} removeu um card`); } }
 function changeUser() { const u = prompt("GitHub User:"); if(u) { localStorage.setItem('kanban_user', u); location.reload(); } }
 function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
 
