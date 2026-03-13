@@ -3,10 +3,11 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let GITHUB_USER = localStorage.getItem('kanban_user') || 'edul0';
-let currentUser = { login: GITHUB_USER, avatar: '', name: 'Eduardo' };
+let currentUser = { login: GITHUB_USER, avatar: 'https://cdn-icons-png.flaticon.com/512/25/25231.png', name: GITHUB_USER };
 let boardState = [];
 let activityLogs = [];
 
+// INICIALIZAÇÃO
 async function initRealtime() {
     const { data } = await _supabase.from('kanban_data').select('*').eq('id', 1).single();
     if (data) { 
@@ -14,6 +15,7 @@ async function initRealtime() {
         activityLogs = data.logs || [];
         renderBoard(); 
         renderLogs();
+        updateStats();
     }
     _supabase.channel('kanban-realtime').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data' }, 
     payload => { 
@@ -21,6 +23,7 @@ async function initRealtime() {
         activityLogs = payload.new.logs || [];
         renderBoard(); 
         renderLogs();
+        updateStats();
     }).subscribe();
 }
 
@@ -30,15 +33,39 @@ async function save(logMsg) {
     await _supabase.from('kanban_data').update({ state: boardState, logs: activityLogs }).eq('id', 1);
 }
 
+// CORREÇÃO DEFINITIVA DO NICK (FALLBACK)
 async function fetchUserProfile(username) {
     try {
         const res = await fetch(`https://api.github.com/users/${username}`);
+        if (!res.ok) throw new Error();
         const data = await res.json();
         currentUser = { login: data.login, avatar: data.avatar_url, name: data.name || data.login };
-        document.getElementById('user-profile').innerHTML = `<img src="${data.avatar_url}"> <span>${currentUser.name}</span>`;
-    } catch(e) { document.getElementById('user-profile').innerHTML = `<span>@${username}</span>`; }
+    } catch(e) {
+        console.warn("API GitHub Limitada. Usando cache.");
+        // Se falhar, mantém o que está no localStorage
+    } finally {
+        document.getElementById('user-profile').innerHTML = `
+            <img src="${currentUser.avatar}"> 
+            <span>${currentUser.name}</span>
+        `;
+    }
 }
 
+// GESTÃO DE STATS
+function updateStats() {
+    const total = boardState.reduce((acc, col) => acc + col.cards.length, 0);
+    const done = boardState.find(c => c.id === 'done')?.cards.length || 0;
+    const perc = total > 0 ? Math.round((done/total)*100) : 0;
+    
+    document.getElementById('stats-content').innerHTML = `
+        <div style="background:#eee; height:10px; border-radius:5px; margin-bottom:5px">
+            <div style="background:var(--success); width:${perc}%; height:100%; border-radius:5px; transition:0.5s"></div>
+        </div>
+        ${perc}% Concluído (${done}/${total})
+    `;
+}
+
+// KANBAN ACTIONS
 async function addCard(colId) {
     const content = prompt("Tarefa:"); if (!content) return;
     const p = prompt("Prioridade: 1-Alta, 2-Média, 3-Baixa");
@@ -50,7 +77,7 @@ async function addCard(colId) {
         content: content,
         priorityClass: prios[p] || "prio-baixa",
         deadline: date,
-        createdAt: new Date().toLocaleString('pt-BR'), // DATA DA SOLICITAÇÃO
+        createdAt: new Date().toLocaleString('pt-BR'),
         owner: currentUser.login,
         ownerAvatar: currentUser.avatar,
         checklist: []
@@ -65,15 +92,19 @@ function renderBoard() {
     const today = new Date().toISOString().split('T')[0];
 
     board.innerHTML = boardState.map(col => {
-        const filtered = col.cards.filter(c => c.content.toLowerCase().includes(search) || c.owner.toLowerCase().includes(search) || c.createdAt.includes(search));
+        const filtered = col.cards.filter(c => 
+            c.content.toLowerCase().includes(search) || 
+            c.owner.toLowerCase().includes(search) || 
+            c.createdAt.includes(search)
+        );
         return `
         <div class="column">
             <div class="column-header">${col.title} (${filtered.length})</div>
             <div class="card-list" ondragover="event.preventDefault()" ondrop="drop(event, '${col.id}')">
                 ${filtered.map(card => `
-                    <div class="card ${card.priorityClass}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
+                    <div class="card ${card.priorityClass} ${card.owner === currentUser.login ? 'is-mine' : ''}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
                         <div class="card-info-row">
-                            <span>Solicitado em: ${card.createdAt}</span>
+                            <span>Criado: ${card.createdAt}</span>
                         </div>
                         <div class="card-content">${card.content}</div>
                         <div class="checklist-container">
@@ -81,7 +112,7 @@ function renderBoard() {
                             <div style="cursor:pointer; color:var(--primary); margin-top:5px; font-weight:bold" onclick="addCheckItem('${card.id}')">+ subtarefa</div>
                         </div>
                         <div class="card-footer">
-                            <span class="${card.deadline < today && col.id !== 'done' ? 'deadline-alert' : ''}">📅 Entrega: ${card.deadline}</span>
+                            <span class="${card.deadline < today && col.id !== 'done' ? 'deadline-alert' : ''}">📅 ${card.deadline}</span>
                             <div class="owner-badge" onclick="takeTask('${card.id}')"><img src="${card.ownerAvatar}"> @${card.owner}</div>
                         </div>
                     </div>`).join('')}
@@ -91,7 +122,7 @@ function renderBoard() {
     }).join('');
 }
 
-// FUNÇÕES AUXILIARES (Checklist, Drag, Logs)
+// LOGS, DRAG, CHECKLIST (REPETIDOS PARA COMPLETUDE)
 async function addCheckItem(cardId) {
     const item = prompt("Subtarefa:"); if(!item) return;
     boardState.forEach(col => { const card = col.cards.find(c => c.id === cardId); if(card) card.checklist.push({ id: crypto.randomUUID(), text: item, done: false }); });
@@ -103,9 +134,9 @@ async function toggleCheck(cardId, itemId) {
 }
 async function takeTask(cardId) {
     boardState.forEach(col => { const card = col.cards.find(c => c.id === cardId); if(card) { card.owner = currentUser.login; card.ownerAvatar = currentUser.avatar; } });
-    renderBoard(); await save(`@${currentUser.login} assumiu uma tarefa`);
+    renderBoard(); await save(`@${currentUser.login} assumiu tarefa`);
 }
-async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(col => col.cards = col.cards.filter(c => c.id !== id)); renderBoard(); await save(`@${currentUser.login} excluiu um card`); } }
+async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(col => col.cards = col.cards.filter(c => c.id !== id)); renderBoard(); await save(`@${currentUser.login} deletou um card`); } }
 function renderLogs() { document.getElementById('log-content').innerHTML = activityLogs.map(l => `<div class="log-entry"><strong>[${l.time}]</strong> ${l.msg}</div>`).join(''); }
 function drag(e) { e.dataTransfer.setData("text", e.target.id); }
 async function drop(e, colId) {
@@ -116,6 +147,6 @@ async function drop(e, colId) {
 function clearLogs() { if(confirm("Limpar logs?")) { activityLogs = []; renderLogs(); save(); } }
 function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
 function changeUser() { const u = prompt("GitHub User:"); if(u) { localStorage.setItem('kanban_user', u); location.reload(); } }
-function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
+function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Copiado!"); }
 
 document.addEventListener('DOMContentLoaded', () => { fetchUserProfile(GITHUB_USER); initRealtime(); });
