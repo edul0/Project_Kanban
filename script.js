@@ -3,137 +3,128 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const urlParams = new URLSearchParams(window.location.search);
-let ROOM_NAME = urlParams.get('sala');
-let currentUser = { 
-    login: localStorage.getItem('kanban_custom_name') || localStorage.getItem('kanban_user') || 'edul0', 
-    avatar: localStorage.getItem('kanban_custom_avatar') || `https://github.com/${localStorage.getItem('kanban_user') || 'edul0'}.png` 
+let ROOM = urlParams.get('sala');
+let user = { 
+    name: localStorage.getItem('kanban_custom_name') || 'Eduardo', 
+    avatar: localStorage.getItem('kanban_custom_avatar') || 'https://github.com/edul0.png' 
 };
 
-let boardState = [];
-let activityLogs = [];
-let activeTab = 'todo'; // Controle mobile
+let state = [];
+let logs = [];
+let currentTab = 'todo';
 
-async function startApp() {
-    const container = document.getElementById('app-container');
-    if (!container) return;
-    if(localStorage.getItem('dark_mode') === 'true') document.body.classList.add('dark-mode');
-    if (!ROOM_NAME) renderLanding();
-    else {
-        renderMuralSkeleton();
-        initRoom();
-    }
+async function start() {
+    if (!ROOM) return renderLanding();
+    renderSkeleton();
+    initData();
 }
 
 function renderLanding() {
     document.getElementById('app-container').innerHTML = `
-        <div class="landing-page" style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-            <img src="marca.png" width="100">
-            <h1>KSpace</h1>
-            <input type="text" id="room-input" placeholder="nome-da-sala" style="font-size:2rem; text-align:center; border:none; border-bottom:3px solid #000; outline:none;">
+        <div style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:monospace;">
+            <img src="marca.png" width="80">
+            <h1 style="font-size:3rem; margin:10px 0;">KSpace</h1>
+            <input type="text" id="in-sala" placeholder="nome-da-sala" style="font-size:1.5rem; text-align:center; border:none; border-bottom:3px solid #000; outline:none; width:250px;">
         </div>`;
-    document.getElementById('room-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && e.target.value) window.location.href = `?sala=${e.target.value.trim()}`;
-    });
+    document.getElementById('in-sala').onkeypress = (e) => { if(e.key==='Enter') window.location.href=`?sala=${e.target.value}`; };
 }
 
-function renderMuralSkeleton() {
+function renderSkeleton() {
     document.getElementById('app-container').innerHTML = `
         <header>
             <div class="header-left">
-                <img src="marca.png" class="header-logo" onclick="window.location.href='index.html'">
-                <div class="user-profile" onclick="manageProfile()"><img src="${currentUser.avatar}" style="width:30px; border-radius:50%"></div>
-                <button onclick="toggleDarkMode()" style="background:none; border:none; cursor:pointer;">🌓</button>
+                <img src="marca.png" class="logo" onclick="window.location.href='index.html'">
+                <img src="${user.avatar}" style="width:30px; border-radius:50%; border:1px solid #000;">
+                <b style="font-size:12px;">${ROOM}</b>
             </div>
             <div style="display:flex; gap:10px;">
-                <button onclick="toggleHistory()" id="mobile-hist-btn" style="background:none; border:none; font-size:20px; display:none;">📜</button>
-                <button onclick="shareBoard()" style="background:#000; color:#fff; border:none; padding:5px 10px; border-radius:4px; font-weight:bold;">🔗</button>
+                <button onclick="toggleLogs()" style="background:none; border:none; font-size:20px; cursor:pointer;">📜</button>
+                <button onclick="share()" style="background:#000; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">🔗</button>
             </div>
         </header>
-        <main id="kanban-board" class="board-container"></main>
-        <nav class="mobile-nav">
-            <div class="nav-item active" onclick="switchTab('todo', this)">📝 TO-DO</div>
-            <div class="nav-item" onclick="switchTab('doing', this)">⚡ DOING</div>
-            <div class="nav-item" onclick="switchTab('done', this)">✅ DONE</div>
-        </nav>
-        <div id="side-panel" class="side-panel">
-            <div class="panel-header">HISTÓRICO <button onclick="toggleHistory()" style="background:none; border:none; color:#0f0; cursor:pointer;">✖</button></div>
-            <div id="log-content"></div>
+        <main id="board" class="mural"></main>
+        <div class="tabs-nav" id="mobile-nav">
+            <div class="tab-btn active" onclick="setTab('todo')">TO-DO</div>
+            <div class="tab-btn" onclick="setTab('doing')">DOING</div>
+            <div class="tab-btn" onclick="setTab('done')">DONE</div>
+        </div>
+        <div id="sidebar">
+            <div style="padding:10px; background:#333; display:flex; justify-content:space-between; align-items:center;">
+                <b>HISTÓRICO</b> <button onclick="toggleLogs()" style="color:#0f0; background:none; border:none; cursor:pointer;">✖</button>
+            </div>
+            <div id="logs"></div>
         </div>`;
-    
-    if(window.innerWidth <= 768) document.getElementById('mobile-hist-btn').style.display = 'block';
+    if(localStorage.getItem('dark_mode') === 'true') document.body.classList.add('dark-mode');
 }
 
-function switchTab(tabId, el) {
-    activeTab = tabId;
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    el.classList.add('active');
-    renderBoard();
-}
-
-async function initRoom() {
-    let { data } = await _supabase.from('kanban_data').select('*').eq('room_name', ROOM_NAME).maybeSingle();
+async function initData() {
+    let { data } = await _supabase.from('kanban_data').select('*').eq('room_name', ROOM).maybeSingle();
     if (!data) {
-        const pass = prompt("Defina uma senha (vazio = público):");
-        const initialState = [{id:"todo", title:"Para fazer", cards:[]},{id:"doing", title:"Em curso", cards:[]},{id:"done", title:"Concluído", cards:[]}];
-        const { data: nD } = await _supabase.from('kanban_data').insert([{ room_name: ROOM_NAME, state: initialState, logs: [], room_password: pass || null }]).select().single();
+        const pass = prompt("Senha da sala (opcional):");
+        const init = [{id:"todo", title:"Para fazer", cards:[]},{id:"doing", title:"Em curso", cards:[]},{id:"done", title:"Concluído", cards:[]}];
+        const { data: nD } = await _supabase.from('kanban_data').insert([{ room_name: ROOM, state: init, logs: [], room_password: pass || null }]).select().single();
         data = nD;
     }
-    boardState = data.state;
-    activityLogs = data.logs || [];
+    state = data.state; logs = data.logs || [];
     renderBoard(); renderLogs();
-    
-    _supabase.channel(ROOM_NAME).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data', filter: `room_name=eq.${ROOM_NAME}` }, 
-    p => { boardState = p.new.state; activityLogs = p.new.logs; renderBoard(); renderLogs(); }).subscribe();
+    _supabase.channel(ROOM).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data', filter: `room_name=eq.${ROOM}` }, 
+    p => { state = p.new.state; logs = p.new.logs; renderBoard(); renderLogs(); }).subscribe();
 }
 
 function renderBoard() {
-    const board = document.getElementById('kanban-board');
+    const board = document.getElementById('board');
     if (!board) return;
     const isMobile = window.innerWidth <= 768;
-
-    board.innerHTML = boardState.map(col => `
-        <div class="column ${isMobile && col.id === activeTab ? 'active' : ''}">
-            <div class="column-header">${col.title}</div>
-            <div class="card-list">
-                ${col.cards.map(card => `
-                    <div class="card ${card.priorityClass || 'prio-media'}" id="${card.id}" ondblclick="deleteCard('${card.id}')">
-                        <div class="card-content">${card.content}</div>
-                        ${card.imageUrl ? `<img src="${card.imageUrl}" class="attached-image">` : ''}
-                        <div style="font-size:9px; color:#999; margin-top:auto; cursor:pointer;" onclick="attachImage('${card.id}')">🖼️ Imagem</div>
+    
+    board.innerHTML = state.map(col => `
+        <div class="coluna ${isMobile && col.id === currentTab ? 'active' : ''}" style="--color: var(--${col.id})">
+            <div class="coluna-header">${col.title} (${col.cards.length})</div>
+            <div class="lista-cards">
+                ${col.cards.map(c => `
+                    <div class="card" id="${c.id}" ondblclick="delCard('${c.id}')">
+                        <div class="card-txt">${c.content}</div>
+                        ${c.img ? `<img src="${c.img}">` : ''}
+                        <div style="font-size:9px; color:#666; margin-top:10px; cursor:pointer; text-align:right;" onclick="addImg('${c.id}')">🖼️ IMAGEM</div>
                     </div>`).join('')}
             </div>
-            <button class="add-btn" onclick="addCard('${col.id}')">+ NOVO</button>
+            <button class="add-btn" onclick="addCard('${col.id}')">+ NOVO POST-IT</button>
         </div>`).join('');
 }
 
-function toggleHistory() { document.getElementById('side-panel').classList.toggle('open'); }
-function toggleDarkMode() { document.body.classList.toggle('dark-mode'); localStorage.setItem('dark_mode', document.body.classList.contains('dark-mode')); }
-function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
+function setTab(tabId) {
+    currentTab = tabId;
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.innerText.toLowerCase().includes(tabId));
+    });
+    renderBoard();
+}
 
 async function save(msg) {
-    if(msg) activityLogs.unshift({ msg, time: new Date().toLocaleTimeString() });
-    await _supabase.from('kanban_data').update({ state: boardState, logs: activityLogs.slice(0,20) }).eq('room_name', ROOM_NAME);
+    if(msg) logs.unshift({ msg, time: new Date().toLocaleTimeString() });
+    await _supabase.from('kanban_data').update({ state, logs: logs.slice(0,15) }).eq('room_name', ROOM);
 }
 
-async function addCard(colId) {
-    const txt = prompt("Tarefa:"); if(!txt) return;
-    boardState.find(c => c.id === colId).cards.push({ id: crypto.randomUUID(), content: txt, priorityClass: 'prio-media' });
-    renderBoard(); await save(`@${currentUser.login} adicionou card`);
+async function addCard(cid) {
+    const t = prompt("Tarefa:"); if(!t) return;
+    state.find(x => x.id === cid).cards.push({ id: crypto.randomUUID(), content: t });
+    renderBoard(); await save(`@${user.name} adicionou: ${t}`);
 }
 
-async function attachImage(id) {
-    const url = prompt("Link da imagem:"); if(!url) return;
-    boardState.forEach(col => { const c = col.cards.find(x => x.id === id); if(c) c.imageUrl = url; });
-    renderBoard(); await save(`Imagem anexada`);
+async function addImg(id) {
+    const u = prompt("URL da imagem:"); if(!u) return;
+    state.forEach(col => { const c = col.cards.find(x => x.id === id); if(c) c.img = u; });
+    renderBoard(); await save(`Imagem adicionada`);
 }
 
-async function deleteCard(id) {
-    if(confirm("Deletar?")) {
-        boardState.forEach(c => c.cards = c.cards.filter(x => x.id !== id));
+async function delCard(id) {
+    if(confirm("Apagar?")) {
+        state.forEach(col => col.cards = col.cards.filter(x => x.id !== id));
         renderBoard(); await save(`Card removido`);
     }
 }
 
-function renderLogs() { document.getElementById('log-content').innerHTML = activityLogs.map(l => `<div style="margin-bottom:8px; border-left:2px solid #0f0; padding-left:8px; font-size:10px;">[${l.time}] ${l.msg}</div>`).join(''); }
+function toggleLogs() { document.getElementById('sidebar').classList.toggle('active'); }
+function renderLogs() { document.getElementById('logs').innerHTML = logs.map(l => `<div style="margin-bottom:8px;">[${l.time}] ${l.msg}</div>`).join(''); }
+function share() { navigator.clipboard.writeText(window.location.href); alert("Copiado!"); }
 
-if (document.readyState === 'complete') startApp(); else document.addEventListener('DOMContentLoaded', startApp);
+start();
