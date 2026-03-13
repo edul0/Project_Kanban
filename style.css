@@ -1,99 +1,54 @@
 :root {
-    --todo-header: #e1f5fe;
-    --doing-header: #fff9c4;
-    --done-header: #e8f5e9;
     --primary: #0078d4;
-    --text: #323130;
+    --danger: #d13438;
+    --success: #107c10;
+    --bg: #f3f2f1;
 }
 
-body {
-    background-color: #f3f2f1;
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    margin: 0;
-    color: var(--text);
-    overflow: hidden;
+body { background: var(--bg); font-family: 'Segoe UI', sans-serif; margin: 0; overflow: hidden; }
+
+header { 
+    display: flex; justify-content: space-between; align-items: center; 
+    padding: 10px 20px; background: white; border-bottom: 1px solid #ddd; 
 }
 
-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 25px;
-    background: white;
-    border-bottom: 1px solid #edebe9;
-}
+.header-left { display: flex; align-items: center; gap: 20px; }
+.search-container input { padding: 8px 15px; border-radius: 20px; border: 1px solid #ccc; width: 300px; outline: none; }
 
-.header-left { display: flex; align-items: center; gap: 30px; }
-
-.search-container input {
-    padding: 8px 15px;
-    border: 1px solid #ddd;
-    border-radius: 20px;
-    width: 250px;
-    outline: none;
-}
-
-.user-profile { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.user-profile { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
 .user-profile img { width: 32px; height: 32px; border-radius: 50%; }
 
-.btn-share {
-    background: var(--primary);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 600;
+.btn-share { background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+
+.board-container { display: flex; height: calc(100vh - 60px); padding: 10px; gap: 10px; overflow-x: auto; }
+
+.column { flex: 1; min-width: 320px; background: #edebe9; border-radius: 8px; display: flex; flex-direction: column; }
+.column-header { padding: 15px; font-weight: bold; background: #fff; border-radius: 8px 8px 0 0; border-bottom: 2px solid #ddd; }
+
+.card-list { flex: 1; padding: 10px; overflow-y: auto; }
+
+.card { 
+    background: white; padding: 12px; border-radius: 4px; margin-bottom: 10px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: grab; border-left: 4px solid #ccc;
 }
 
-.board-container { display: flex; height: calc(100vh - 60px); overflow-x: auto; padding: 10px; box-sizing: border-box; }
+.prio-alta { border-left-color: var(--danger) !important; color: var(--danger); }
+.prio-media { border-left-color: #ffaa44 !important; color: #857c00; }
+.prio-baixa { border-left-color: var(--success) !important; color: var(--success); }
 
-.column {
-    flex: 1;
-    min-width: 300px;
-    background: #ebedef;
-    margin: 0 5px;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
+.priority-tag { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; display: block; }
+
+.card-content { font-size: 14px; color: #333; margin: 8px 0; font-weight: 500; }
+
+.card-footer { 
+    display: flex; justify-content: space-between; align-items: center; 
+    margin-top: 10px; border-top: 1px solid #eee; padding-top: 8px; font-size: 11px;
 }
 
-.column-header { padding: 15px; font-weight: 700; text-align: center; border-radius: 8px 8px 0 0; }
-.column:nth-child(1) .column-header { background: var(--todo-header); color: #0078d4; }
-.column:nth-child(2) .column-header { background: var(--doing-header); color: #857c00; }
-.column:nth-child(3) .column-header { background: var(--done-header); color: #107c10; }
+.deadline { padding: 2px 5px; border-radius: 3px; font-weight: bold; }
+.deadline-overdue { background: #fde7e9; color: var(--danger); } /* Vermelho se atrasado */
 
-.card-list { flex-grow: 1; padding: 10px; overflow-y: auto; }
+.owner-badge { display: flex; align-items: center; gap: 5px; color: #666; cursor: pointer; }
+.owner-badge img { width: 18px; height: 18px; border-radius: 50%; }
 
-.card {
-    background: white;
-    border-radius: 6px;
-    padding: 12px;
-    margin-bottom: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    border-left: 5px solid #ccc;
-    cursor: grab;
-    position: relative;
-}
-
-.priority-tag { font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 10px; text-transform: uppercase; margin-bottom: 8px; display: inline-block; }
-.prio-alta { background: #fee2e2; color: #dc2626; }
-.prio-media { background: #fef3c7; color: #d97706; }
-.prio-baixa { background: #dcfce7; color: #16a34a; }
-
-.card-content { font-size: 14px; font-weight: 500; margin-bottom: 15px; }
-
-.card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-top: 1px solid #eee;
-    padding-top: 8px;
-    font-size: 10px;
-    color: #666;
-}
-
-.owner-info { display: flex; align-items: center; gap: 5px; cursor: help; }
-.owner-info img { width: 18px; height: 18px; border-radius: 50%; }
-
-.add-btn { border: none; background: transparent; padding: 12px; color: var(--primary); font-weight: 600; cursor: pointer; text-align: left; }
+.add-btn { border: none; background: #fff; padding: 10px; cursor: pointer; color: var(--primary); font-weight: bold; border-radius: 0 0 8px 8px; }
