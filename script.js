@@ -95,3 +95,36 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSharedBoard();
     render();
 });
+
+// ... (mantenha suas funções de moveCard e addCard como estão)
+
+function renderBoard() {
+    const board = document.getElementById('kanban-board');
+    if (!board) return;
+
+    board.innerHTML = boardState.map(col => `
+        <div class="column">
+            <div class="column-header">
+                <h3>${col.title}</h3>
+                <span style="color: #605e5d; font-size: 12px;">${col.cards.length}</span>
+            </div>
+            
+            <div class="card-list" id="${col.id}" 
+                 ondragover="handleDragOver(event)" 
+                 ondrop="handleDrop(event)"
+                 style="min-height: 10px;">
+                 
+                ${col.cards.map(card => `
+                    <div class="card" id="${card.id}" draggable="true" ondragstart="handleDragStart(event)">
+                        ${card.content}
+                    </div>
+                `).join('')}
+                
+            </div>
+
+            <button class="add-btn" onclick="addCard('${col.id}')">
+                <span style="font-size: 18px;">+</span> Adicionar tarefa
+            </button>
+        </div>
+    `).join('');
+}
