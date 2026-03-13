@@ -1,13 +1,19 @@
-// === 1. ESTADO ===
+// === CONFIGURAÇÕES INICIAIS ===
 const generateId = () => crypto.randomUUID();
 
-let boardState = [
-    { id: "todo", title: "A Fazer", cards: [{ id: generateId(), content: "Configurar o projeto" }, { id: generateId(), content: "Estudar Drag and Drop" }] },
+// Tenta carregar dados do LocalStorage ou usa o padrão se estiver vazio
+let boardState = JSON.parse(localStorage.getItem('kanbanData')) || [
+    { id: "todo", title: "A Fazer", cards: [] },
     { id: "doing", title: "Em Andamento", cards: [] },
     { id: "done", title: "Concluído", cards: [] }
 ];
 
-// === 2. LÓGICA DE MOVIMENTO ===
+// === FUNÇÕES DE PERSISTÊNCIA ===
+function saveToLocalStorage() {
+    localStorage.setItem('kanbanData', JSON.stringify(boardState));
+}
+
+// === LÓGICA DE DRAG AND DROP ===
 function handleDragStart(event) {
     event.dataTransfer.setData("text/plain", event.target.id);
 }
@@ -19,51 +25,71 @@ function handleDragOver(event) {
 function handleDrop(event) {
     event.preventDefault();
     const cardId = event.dataTransfer.getData("text/plain");
-    const targetColumn = event.target.closest('.card-list');
+    const targetColumnList = event.target.closest('.card-list');
     
-    if (targetColumn) {
-        moveCard(cardId, targetColumn.id);
+    if (targetColumnList) {
+        const targetColumnId = targetColumnList.id;
+        moveCard(cardId, targetColumnId);
     }
 }
 
 function moveCard(cardId, targetColumnId) {
     let movedCard = null;
+
+    // Localiza e remove o card de onde ele estava
     boardState.forEach(col => {
-        const index = col.cards.findIndex(c => c.id === cardId);
-        if (index !== -1) {
-            movedCard = col.cards.splice(index, 1)[0];
+        const cardIndex = col.cards.findIndex(c => c.id === cardId);
+        if (cardIndex !== -1) {
+            movedCard = col.cards.splice(cardIndex, 1)[0];
         }
     });
 
-    const colDestino = boardState.find(col => col.id === targetColumnId);
-    if (colDestino && movedCard) {
-        colDestino.cards.push(movedCard);
+    // Adiciona na nova coluna
+    const destinationCol = boardState.find(col => col.id === targetColumnId);
+    if (destinationCol && movedCard) {
+        destinationCol.cards.push(movedCard);
+        saveToLocalStorage(); // Salva a nova posição
+        renderBoard();
     }
-    renderBoard();
 }
 
-// === 3. RENDERIZAÇÃO ===
-function renderBoard() {
-    console.log("Renderizando quadro...");
-    const board = document.getElementById('kanban-board');
-    if (!board) {
-        console.error("ERRO: Elemento kanban-board não encontrado no HTML!");
-        return;
-    }
+// === CRIAÇÃO DE CARDS ===
+function addCard(columnId) {
+    const content = prompt("O que precisa ser feito?");
+    if (!content || content.trim() === "") return;
 
-    board.innerHTML = boardState.map(col => `
+    const column = boardState.find(col => col.id === columnId);
+    if (column) {
+        column.cards.push({ id: generateId(), content: content });
+        saveToLocalStorage(); // Salva o novo card
+        renderBoard();
+    }
+}
+
+// === RENDERIZAÇÃO ===
+function renderBoard() {
+    const boardElement = document.getElementById('kanban-board');
+    if (!boardElement) return;
+
+    boardElement.innerHTML = boardState.map(col => `
         <div class="column">
             <h3>${col.title}</h3>
-            <div class="card-list" id="${col.id}" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+            <div class="card-list" id="${col.id}" 
+                 ondragover="handleDragOver(event)" 
+                 ondrop="handleDrop(event)">
+                
                 ${col.cards.map(card => `
-                    <div class="card" id="${card.id}" draggable="true" ondragstart="handleDragStart(event)">
+                    <div class="card" id="${card.id}" draggable="true" 
+                         ondragstart="handleDragStart(event)">
                         ${card.content}
                     </div>
                 `).join('')}
+                
             </div>
+            <button class="add-btn" onclick="addCard('${col.id}')">+ Adicionar cartão</button>
         </div>
     `).join('');
 }
 
-// Inicializa
-window.onload = renderBoard;
+// Inicialização oficial
+document.addEventListener('DOMContentLoaded', renderBoard);
