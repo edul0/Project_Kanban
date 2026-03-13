@@ -1,6 +1,6 @@
 // CONFIGURAÇÕES DO SUPABASE (Use os dados do seu projeto)
 const SUPABASE_URL = 'https://tuansquxjvbalzxnfglz.supabase.co';
-const SUPABASE_KEY = 'COLE_AQUI_A_SUA_ANON_KEY'; // Aquela chave eyJ...
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1YW5zcXV4anZiYWx6eG5mZ2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTIzNTYsImV4cCI6MjA4ODk2ODM1Nn0.C8FaFGWv0VyOew47NfYXfAl-ksx9TFlI6mkPWcV9diM'; // Aquela chave eyJ...
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const GITHUB_USER = localStorage.getItem('kanban_user') || 'edul0';
