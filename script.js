@@ -24,9 +24,9 @@ async function startApp() {
 function renderLanding() {
     document.getElementById('app-container').innerHTML = `
         <div class="landing-page">
-            <h1>Post-it Board /</h1>
+            <h1>KanbanSpace /</h1>
             <input type="text" id="room-input" placeholder="nome-da-sala" autofocus>
-            <p style="color: #888; margin-top: 20px; font-family: monospace;">Acesse murais instantâneos.</p>
+            <p style="color: #888; margin-top: 20px; font-family: monospace;">Acesse murais instantâneos estilo Dontpad.</p>
         </div>
     `;
     const input = document.getElementById('room-input');
@@ -54,7 +54,6 @@ function renderMuralSkeleton() {
         <main id="kanban-board" class="board-container"></main>
         <div id="log-panel" class="log-panel">
             <div class="log-header">Status <span id="stats-content">0%</span></div>
-            <div class="log-header">Histórico <button onclick="clearLogs()" style="border:none; background:transparent; cursor:pointer;">🗑️</button></div>
             <div id="log-content" class="log-content"></div>
         </div>
     `;
@@ -81,10 +80,35 @@ async function initRoom() {
 
     boardState = data.state;
     activityLogs = data.logs || [];
-    renderBoard(); renderLogs(); updateStats();
-
+    renderBoard(); renderLogs();
+    
     _supabase.channel(`room-${ROOM_NAME}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data', filter: `room_name=eq.${ROOM_NAME}` }, 
-    payload => { boardState = payload.new.state; activityLogs = payload.new.logs || []; renderBoard(); renderLogs(); updateStats(); }).subscribe();
+    payload => { boardState = payload.new.state; activityLogs = payload.new.logs || []; renderBoard(); renderLogs(); }).subscribe();
+}
+
+// --- LOGICA DE PRIORIDADE ---
+function getPriorityClass() {
+    const p = prompt("Prioridade: 1-Alta, 2-Média, 3-Baixa", "2");
+    if (p === "1") return "prio-alta";
+    if (p === "3") return "prio-baixa";
+    return "prio-media";
+}
+
+// --- LOGICA DE ATRIBUIÇÃO ---
+async function assignTask(cardId) {
+    const target = prompt("Delegar para (@nick ou 'eu'):", "eu");
+    if (!target) return;
+    const nick = target.toLowerCase() === 'eu' ? currentUser.login : target.replace('@', '');
+    
+    boardState.forEach(col => {
+        const card = col.cards.find(c => c.id === cardId);
+        if (card) {
+            card.owner = nick;
+            card.ownerAvatar = `https://github.com/${nick}.png`;
+        }
+    });
+    renderBoard();
+    await save(`Tarefa delegada para @${nick}`);
 }
 
 function renderBoard() {
@@ -92,24 +116,33 @@ function renderBoard() {
     if (!board || !boardState) return;
     const search = document.getElementById('board-search').value.toLowerCase();
     
-    board.innerHTML = boardState.map(col => {
-        let cards = col.cards.filter(c => c.content.toLowerCase().includes(search));
-        return `
+    board.innerHTML = boardState.map(col => `
         <div class="column">
-            <div class="column-header">${col.title} (${cards.length})</div>
+            <div class="column-header">${col.title}</div>
             <div class="card-list" ondragover="event.preventDefault()" ondrop="drop(event, '${col.id}')">
-                ${cards.map(card => `
-                    <div class="card" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
+                ${col.cards.filter(c => c.content.toLowerCase().includes(search)).map(card => `
+                    <div class="card ${card.priorityClass || 'prio-media'}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
                         <div class="card-content">${card.content}</div>
                         <div class="card-footer">
-                            <span>@${card.owner}</span>
-                            <div class="owner-info"><img src="${card.ownerAvatar}"></div>
+                            <div class="owner-info" onclick="assignTask('${card.id}')">
+                                <img src="${card.ownerAvatar}"> <span>@${card.owner}</span>
+                            </div>
                         </div>
                     </div>`).join('')}
             </div>
             <button class="add-btn" onclick="addCard('${col.id}')">+ Novo Post-it</button>
-        </div>`;
-    }).join('');
+        </div>
+    `).join('');
+}
+
+async function addCard(colId) {
+    const txt = prompt("Texto:"); if (!txt) return;
+    const priority = getPriorityClass();
+    boardState.find(c => c.id === colId).cards.push({ 
+        id: crypto.randomUUID(), content: txt, owner: currentUser.login, 
+        ownerAvatar: currentUser.avatar, priorityClass: priority 
+    });
+    playSound('audio-paper'); renderBoard(); await save(`@${currentUser.login} criou card`);
 }
 
 async function save(logMsg) {
@@ -117,12 +150,6 @@ async function save(logMsg) {
     await _supabase.from('kanban_data').update({ state: boardState, logs: activityLogs }).eq('room_name', ROOM_NAME);
 }
 
-// APOIO (ADD, DRAG, DROP, LOGS)
-async function addCard(colId) {
-    const txt = prompt("Texto:"); if (!txt) return;
-    boardState.find(c => c.id === colId).cards.push({ id: crypto.randomUUID(), content: txt, owner: currentUser.login, ownerAvatar: currentUser.avatar });
-    playSound('audio-paper'); renderBoard(); await save(`@${currentUser.login} criou card`);
-}
 function drag(e) { e.dataTransfer.setData("text", e.target.id); }
 async function drop(e, colId) {
     const id = e.dataTransfer.getData("text"); let card;
@@ -137,13 +164,7 @@ async function fetchUserProfile(u) {
     } catch(e) {}
 }
 function renderLogs() { const lc = document.getElementById('log-content'); if(lc) lc.innerHTML = activityLogs.map(l => `<div>[${l.time}] ${l.msg}</div>`).join(''); }
-function updateStats() {
-    const tot = boardState.reduce((a, c) => a + c.cards.length, 0);
-    const ok = boardState.find(c => c.id === 'done')?.cards.length || 0;
-    const st = document.getElementById('stats-content');
-    if(st) st.innerText = `${tot > 0 ? Math.round((ok/tot)*100) : 0}%`;
-}
-function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Copiado!"); }
+function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
 function changeUser() { const u = prompt("User:"); if(u) { localStorage.setItem('kanban_user', u); location.reload(); } }
 async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(c => c.cards = c.cards.filter(x => x.id !== id)); renderBoard(); await save(`Removido`); } }
 
