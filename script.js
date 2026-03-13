@@ -5,7 +5,6 @@ const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const urlParams = new URLSearchParams(window.location.search);
 let ROOM = urlParams.get('sala');
 
-// GESTÃO DE USUÁRIO
 let CUSTOM_NAME = localStorage.getItem('kanban_custom_name');
 let CUSTOM_AVATAR = localStorage.getItem('kanban_custom_avatar');
 let GITHUB_USER = localStorage.getItem('kanban_user') || 'edul0';
@@ -28,7 +27,7 @@ function renderLanding() {
     document.getElementById('app-container').innerHTML = `
         <div style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:monospace;">
             <img src="marca.png" width="100">
-            <h1>KSpace</h1>
+            <h1>KSpace /</h1>
             <input type="text" id="sala-in" placeholder="nome-da-sala" style="font-size:1.8rem; text-align:center; border:none; border-bottom:4px solid #000; outline:none; width:280px;">
         </div>`;
     document.getElementById('sala-in').onkeypress = (e) => { if(e.key==='Enter') window.location.href=`?sala=${e.target.value}`; };
@@ -44,9 +43,9 @@ function renderSkeleton() {
                     <span style="font-size:12px; font-weight:bold;">${user.name}</span>
                 </div>
             </div>
-            <div class="header-right">
-                <button class="icon-btn" onclick="toggleDark()">🌓</button>
-                <button class="link-btn" onclick="share()">LINK 🔗</button>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <button onclick="toggleDark()" style="background:none; border:none; font-size:20px; cursor:pointer;">🌓</button>
+                <button onclick="share()" style="background:#000; color:#fff; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">LINK</button>
             </div>
         </header>
         <main id="board" class="board-container"></main>
@@ -57,26 +56,48 @@ function renderSkeleton() {
 }
 
 function manageProfile() {
-    const mode = prompt("1-GitHub, 2-Nome/Foto Manual, 3-Reset", "2");
+    const mode = prompt("1-GitHub, 2-Manual, 3-Reset", "2");
     if(mode === "1") {
         const n = prompt("GitHub User:"); if(n) { localStorage.removeItem('kanban_custom_name'); localStorage.setItem('kanban_user', n); location.reload(); }
     } else if(mode === "2") {
-        const n = prompt("Seu Nome:"); const a = prompt("URL da Foto:");
+        const n = prompt("Seu Nome:"); const a = prompt("URL Foto:");
         if(n && a) { localStorage.setItem('kanban_custom_name', n); localStorage.setItem('kanban_custom_avatar', a); location.reload(); }
     } else if(mode === "3") { localStorage.clear(); location.reload(); }
 }
 
 async function initData() {
+    // Busca inicial
     let { data } = await _supabase.from('kanban_data').select('*').eq('room_name', ROOM).maybeSingle();
+    
     if (!data) {
-        const init = [{id:"todo", title:"A Fazer", cards:[]},{id:"doing", title:"Em Curso", cards:[]},{id:"done", title:"Feito", cards:[]}];
+        const init = [{id:"todo", title:"Para fazer", cards:[]},{id:"doing", title:"Em curso", cards:[]},{id:"done", title:"Concluído", cards:[]}];
         const { data: nD } = await _supabase.from('kanban_data').insert([{ room_name: ROOM, state: init, logs: [] }]).select().single();
         data = nD;
     }
-    state = data.state; logs = data.logs || [];
-    renderBoard(); renderLogs();
-    _supabase.channel(ROOM).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data', filter: `room_name=eq.${ROOM}` }, 
-    p => { state = p.new.state; logs = p.new.logs; renderBoard(); renderLogs(); }).subscribe();
+    
+    state = data.state; 
+    logs = data.logs || [];
+    renderBoard(); 
+    renderLogs();
+
+    // INSCRIÇÃO REALTIME (FORÇADA)
+    _supabase
+        .channel(`room_${ROOM}`)
+        .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'kanban_data', 
+            filter: `room_name=eq.${ROOM}` 
+        }, (payload) => {
+            console.log("Mudança detectada!", payload);
+            state = payload.new.state;
+            logs = payload.new.logs || [];
+            renderBoard();
+            renderLogs();
+        })
+        .subscribe((status) => {
+            console.log("Status da conexão:", status);
+        });
 }
 
 function renderBoard() {
@@ -93,7 +114,7 @@ function renderBoard() {
                         <div class="prio-indicator">${emoji}</div>
                         <div style="font-weight:bold; flex:1; font-size:14px; margin-top:5px;">${c.content}</div>
                         ${c.img ? `<img src="${c.img}" class="task-img">` : ''}
-                        <div style="font-size:9px; color:#666; margin-top:10px; cursor:pointer;" onclick="addImg('${c.id}')">🖼️ ANEXAR</div>
+                        <div style="font-size:9px; color:#666; margin-top:10px; cursor:pointer; text-align:right;" onclick="addImg('${c.id}')">🖼️ IMAGEM</div>
                         <div class="card-footer" onclick="assign('${c.id}')" style="cursor:pointer;">
                             <img src="${c.ownerAvatar || 'https://github.com/identicons/ghost.png'}">
                             <span>@${c.owner || 'atribuir'}</span>
@@ -124,12 +145,13 @@ async function drop(ev, destColId) {
 
 async function save(msg) {
     if(msg) logs.unshift({ msg, time: new Date().toLocaleTimeString() });
-    await _supabase.from('kanban_data').update({ state, logs: logs.slice(0,20) }).eq('room_name', ROOM);
+    const { error } = await _supabase.from('kanban_data').update({ state, logs: logs.slice(0,20) }).eq('room_name', ROOM);
+    if(error) console.error("Erro ao salvar:", error);
 }
 
 async function addCard(cid) {
     const t = prompt("Tarefa:"); if(!t) return;
-    const p = prompt("Prioridade: 1-Alta, 2-Média, 3-Baixa", "2");
+    const p = prompt("1-Alta, 2-Média, 3-Baixa", "2");
     const prioClass = p==="1"?"prio-alta":(p==="3"?"prio-baixa":"prio-media");
     state.find(x => x.id === cid).cards.push({ 
         id: crypto.randomUUID(), content: t, prio: prioClass, owner: user.name, ownerAvatar: user.avatar 
@@ -143,18 +165,18 @@ async function assign(id) {
         const c = col.cards.find(x => x.id === id);
         if(c) { c.owner = n; c.ownerAvatar = `https://github.com/${n}.png`; }
     });
-    renderBoard(); await save(`Tarefa delegada para @${n}`);
+    renderBoard(); await save(`Delegado para @${n}`);
 }
 
 async function addImg(id) {
     const u = prompt("URL Imagem:"); if(!u) return;
     state.forEach(col => { const c = col.cards.find(x => x.id === id); if(c) c.img = u; });
-    renderBoard(); await save(`Imagem adicionada`);
+    renderBoard(); await save(`Imagem anexada`);
 }
 
 async function delCard(id) { if(confirm("Apagar?")) { state.forEach(col => col.cards = col.cards.filter(x => x.id !== id)); renderBoard(); await save(`Removido`); } }
 function toggleDark() { document.body.classList.toggle('dark-mode'); }
 function renderLogs() { document.getElementById('log-content').innerHTML = logs.map(l => `<div style="margin-bottom:8px; border-left:2px solid #0f0; padding-left:8px;">[${l.time}] ${l.msg}</div>`).join(''); }
-function share() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
+function share() { navigator.clipboard.writeText(window.location.href); alert("Copiado!"); }
 
 start();
