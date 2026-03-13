@@ -1,87 +1,94 @@
 :root {
-    --bg-page: #f3f2f1;
-    --column-bg: #eff6fc; /* Um azul bem clarinho para as colunas */
-    --card-bg: #ffffff;
-    --primary: #0078d4;
-    --text-black: #323130;
-    --text-secondary: #605e5d;
+    --todo: #e1f5fe;
+    --doing: #fff9c4;
+    --done: #e8f5e9;
+    --text: #333;
 }
 
 body {
-    background-color: var(--bg-page);
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    background-color: #ffffff;
+    font-family: 'Segoe UI', sans-serif;
     margin: 0;
-    color: var(--text-black);
 }
 
 header {
-    background: white;
-    padding: 12px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    padding: 15px 30px;
+    border-bottom: 2px solid #eee;
 }
 
-header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: bold;
+}
+
+.user-profile img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #0078d4;
+}
 
 .board-container {
     display: flex;
-    padding: 24px;
-    gap: 20px;
-    align-items: flex-start;
-    overflow-x: auto;
+    padding: 20px;
+    gap: 0; /* Colunas coladas como na imagem */
+    height: calc(100vh - 80px);
 }
 
 .column {
-    background: #f3f2f1; /* Fundo sutil para a coluna */
-    width: 300px;
-    min-width: 300px;
-    border-radius: 4px;
-    padding: 12px;
+    flex: 1;
+    min-width: 250px;
+    border-right: 1px solid #eee;
     display: flex;
     flex-direction: column;
 }
 
 .column-header {
-    display: flex;
-    justify-content: space-between;
-    padding: 0 4px 12px 4px;
+    padding: 15px;
+    text-align: center;
+    text-transform: uppercase;
+    font-size: 14px;
+    letter-spacing: 1px;
+    font-weight: 800;
 }
 
-.column h3 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--text-black);
+/* Cores das colunas baseadas na imagem */
+.column:nth-child(1) .column-header { background: var(--todo); color: #0288d1; }
+.column:nth-child(2) .column-header { background: var(--doing); color: #fbc02d; }
+.column:nth-child(3) .column-header { background: var(--done); color: #388e3c; }
+
+.card-list {
+    flex-grow: 1;
+    padding: 15px;
+    background: #fcfcfc;
 }
 
 .card {
-    background: var(--card-bg);
-    border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    border: 1px solid #edebe9;
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    border-left: 5px solid #ccc; /* Detalhe lateral */
     cursor: grab;
-    font-size: 14px;
-    line-height: 1.4;
+    position: relative;
 }
 
-.card:hover { border-color: var(--primary); }
+/* Cores das etiquetas dos cards */
+.column:nth-child(1) .card { border-left-color: #0288d1; }
+.column:nth-child(2) .card { border-left-color: #fbc02d; }
+.column:nth-child(3) .card { border-left-color: #388e3c; }
 
 .add-btn {
-    background: none;
     border: none;
-    color: var(--primary);
+    background: #f4f4f4;
+    padding: 10px;
     cursor: pointer;
-    text-align: left;
-    padding: 8px;
-    font-weight: 600;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    font-weight: bold;
+    color: #666;
 }
-
-.add-btn:hover { background: rgba(0,120,212,0.05); border-radius: 4px; }
