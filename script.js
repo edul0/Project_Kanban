@@ -1,19 +1,28 @@
-// 1. Quando o usuário começa a arrastar o card
+// === 1. CONFIGURAÇÕES E ESTADO INICIAL ===
+const generateId = () => crypto.randomUUID();
+
+let boardState = [
+    {
+        id: "todo",
+        title: "A Fazer",
+        cards: [
+            { id: generateId(), content: "Configurar o projeto" },
+            { id: generateId(), content: "Estudar Drag and Drop" }
+        ]
+    },
+    { id: "doing", title: "Em Andamento", cards: [] },
+    { id: "done", title: "Concluído", cards: [] }
+];
+
+// === 2. FUNÇÕES DE LÓGICA (AS QUE VOCÊ PERGUNTOU "ONDE?") ===
+
 function handleDragStart(event) {
-    // Salva o ID do card que está sendo movido
     event.dataTransfer.setData("text/plain", event.target.id);
-    console.log("Arrastando card:", event.target.id);
 }
 
-// 2. Quando o card é solto em uma coluna
 function handleDrop(event) {
     event.preventDefault();
-    
-    // Pega o ID do card que salvamos no DragStart
     const cardId = event.dataTransfer.getData("text/plain");
-    
-    // Descobre qual é a coluna de destino (onde o card foi solto)
-    // Usamos .closest() para garantir que pegamos a div da lista mesmo se soltar em cima de outro card
     const targetColumnList = event.target.closest('.card-list');
     
     if (targetColumnList) {
@@ -22,11 +31,8 @@ function handleDrop(event) {
     }
 }
 
-// 3. A lógica que altera os dados (boardState)
 function moveCard(cardId, targetColumnId) {
     let cardToMove;
-    
-    // Remove o card da coluna atual
     boardState.forEach(column => {
         const cardIndex = column.cards.findIndex(c => c.id === cardId);
         if (cardIndex !== -1) {
@@ -34,12 +40,37 @@ function moveCard(cardId, targetColumnId) {
         }
     });
 
-    // Adiciona o card na nova coluna
     const targetColumn = boardState.find(col => col.id === targetColumnId);
     if (targetColumn && cardToMove) {
         targetColumn.cards.push(cardToMove);
     }
-
-    // RE-RENDERIZA tudo para refletir a mudança na tela
-    renderBoard();
+    renderBoard(); // Desenha a tela novamente com os novos dados
 }
+
+// === 3. FUNÇÃO DE RENDERIZAÇÃO (DESENHAR NA TELA) ===
+
+function renderBoard() {
+    const boardElement = document.getElementById('kanban-board');
+    if (!boardElement) return;
+
+    boardElement.innerHTML = boardState.map(column => `
+        <div class="column">
+            <h3>${column.title}</h3>
+            <div class="card-list" id="${column.id}" 
+                 ondrop="handleDrop(event)" 
+                 ondragover="event.preventDefault()">
+                
+                ${column.cards.map(card => `
+                    <div class="card" id="${card.id}" draggable="true" 
+                         ondragstart="handleDragStart(event)">
+                        ${card.content}
+                    </div>
+                `).join('')}
+                
+            </div>
+        </div>
+    `).join('');
+}
+
+// Inicialização
+window.onload = renderBoard;
