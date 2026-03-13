@@ -78,6 +78,43 @@ header {
     cursor: grab;
     position: relative;
 }
+/* Ajuste no perfil do cabeçalho */
+.user-profile img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* Avatar dentro do card (Estilo Microsoft Planner) */
+.card-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+.card-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #ddd;
+}
+
+/* Melhorando o botão de adicionar */
+.add-btn {
+    border: none;
+    background: transparent;
+    padding: 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #0078d4;
+    text-align: left;
+    transition: background 0.2s;
+}
+
+.add-btn:hover {
+    background: rgba(0, 120, 212, 0.05);
+}
 
 /* Cores das etiquetas dos cards */
 .column:nth-child(1) .card { border-left-color: #0288d1; }
