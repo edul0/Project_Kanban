@@ -24,9 +24,9 @@ async function startApp() {
 function renderLanding() {
     document.getElementById('app-container').innerHTML = `
         <div class="landing-page">
-            <h1>KanbanSpace /</h1>
+            <h1>Post-it Board /</h1>
             <input type="text" id="room-input" placeholder="nome-da-sala" autofocus>
-            <p style="color: #888; margin-top: 20px; font-family: monospace;">Acesse murais instantâneos estilo Dontpad.</p>
+            <p style="color: #888; margin-top: 20px; font-family: monospace;">Mural instantâneo estilo Dontpad.</p>
         </div>
     `;
     const input = document.getElementById('room-input');
@@ -54,6 +54,7 @@ function renderMuralSkeleton() {
         <main id="kanban-board" class="board-container"></main>
         <div id="log-panel" class="log-panel">
             <div class="log-header">Status <span id="stats-content">0%</span></div>
+            <div class="log-header">Histórico <button onclick="clearLogs()" style="border:none; background:transparent; cursor:pointer;">🗑️</button></div>
             <div id="log-content" class="log-content"></div>
         </div>
     `;
@@ -80,21 +81,21 @@ async function initRoom() {
 
     boardState = data.state;
     activityLogs = data.logs || [];
-    renderBoard(); renderLogs();
-    
+    renderBoard(); renderLogs(); updateStats();
+
     _supabase.channel(`room-${ROOM_NAME}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data', filter: `room_name=eq.${ROOM_NAME}` }, 
-    payload => { boardState = payload.new.state; activityLogs = payload.new.logs || []; renderBoard(); renderLogs(); }).subscribe();
+    payload => { boardState = payload.new.state; activityLogs = payload.new.logs || []; renderBoard(); renderLogs(); updateStats(); }).subscribe();
 }
 
-// --- LOGICA DE PRIORIDADE ---
+// --- PRIORIDADE ---
 function getPriorityClass() {
-    const p = prompt("Prioridade: 1-Alta, 2-Média, 3-Baixa", "2");
+    const p = prompt("Prioridade:\n1-Alta (Vermelho)\n2-Média (Laranja)\n3-Baixa (Verde)", "2");
     if (p === "1") return "prio-alta";
     if (p === "3") return "prio-baixa";
     return "prio-media";
 }
 
-// --- LOGICA DE ATRIBUIÇÃO ---
+// --- ATRIBUIÇÃO ---
 async function assignTask(cardId) {
     const target = prompt("Delegar para (@nick ou 'eu'):", "eu");
     if (!target) return;
@@ -116,31 +117,34 @@ function renderBoard() {
     if (!board || !boardState) return;
     const search = document.getElementById('board-search').value.toLowerCase();
     
-    board.innerHTML = boardState.map(col => `
+    board.innerHTML = boardState.map(col => {
+        const filteredCards = col.cards.filter(c => c.content.toLowerCase().includes(search));
+        return `
         <div class="column">
-            <div class="column-header">${col.title}</div>
+            <div class="column-header">${col.title} (${filteredCards.length})</div>
             <div class="card-list" ondragover="event.preventDefault()" ondrop="drop(event, '${col.id}')">
-                ${col.cards.filter(c => c.content.toLowerCase().includes(search)).map(card => `
-                    <div class="card ${card.priorityClass || 'prio-media'}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
+                ${filteredCards.map(card => `
+                    <div class="card ${card.priorityClass || 'prio-media'} ${card.owner === currentUser.login ? 'is-mine' : ''}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
                         <div class="card-content">${card.content}</div>
                         <div class="card-footer">
-                            <div class="owner-info" onclick="assignTask('${card.id}')">
-                                <img src="${card.ownerAvatar}"> <span>@${card.owner}</span>
+                            <div class="owner-info" onclick="assignTask('${card.id}')" title="Clique para atribuir">
+                                <img src="${card.ownerAvatar || 'https://github.com/identicons/ghost.png'}" onerror="this.src='https://github.com/identicons/ghost.png'">
+                                <span>@${card.owner || 'sem-nome'}</span>
                             </div>
                         </div>
                     </div>`).join('')}
             </div>
             <button class="add-btn" onclick="addCard('${col.id}')">+ Novo Post-it</button>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 async function addCard(colId) {
-    const txt = prompt("Texto:"); if (!txt) return;
-    const priority = getPriorityClass();
+    const txt = prompt("O que precisa ser feito?"); if (!txt) return;
+    const prio = getPriorityClass();
     boardState.find(c => c.id === colId).cards.push({ 
         id: crypto.randomUUID(), content: txt, owner: currentUser.login, 
-        ownerAvatar: currentUser.avatar, priorityClass: priority 
+        ownerAvatar: currentUser.avatar, priorityClass: prio 
     });
     playSound('audio-paper'); renderBoard(); await save(`@${currentUser.login} criou card`);
 }
@@ -156,6 +160,7 @@ async function drop(e, colId) {
     boardState.forEach(c => { const i = c.cards.findIndex(x => x.id === id); if(i > -1) card = c.cards.splice(i, 1)[0]; });
     if(card) { boardState.find(c => c.id === colId).cards.push(card); playSound('audio-paper'); renderBoard(); await save(`Movido`); }
 }
+
 async function fetchUserProfile(u) {
     try {
         const r = await fetch(`https://api.github.com/users/${u}`);
@@ -163,9 +168,17 @@ async function fetchUserProfile(u) {
         currentUser = { login: d.login, avatar: d.avatar_url, name: d.name || d.login };
     } catch(e) {}
 }
+
 function renderLogs() { const lc = document.getElementById('log-content'); if(lc) lc.innerHTML = activityLogs.map(l => `<div>[${l.time}] ${l.msg}</div>`).join(''); }
+function updateStats() {
+    const tot = boardState.reduce((a, c) => a + c.cards.length, 0);
+    const ok = boardState.find(c => c.id === 'done')?.cards.length || 0;
+    const st = document.getElementById('stats-content');
+    if(st) st.innerText = `${tot > 0 ? Math.round((ok/tot)*100) : 0}%`;
+}
 function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
 function changeUser() { const u = prompt("User:"); if(u) { localStorage.setItem('kanban_user', u); location.reload(); } }
 async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(c => c.cards = c.cards.filter(x => x.id !== id)); renderBoard(); await save(`Removido`); } }
+function clearLogs() { if(confirm("Limpar?")) { activityLogs = []; renderLogs(); save(); } }
 
 document.addEventListener('DOMContentLoaded', startApp);
