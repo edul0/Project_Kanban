@@ -1,61 +1,45 @@
-// === PASSO 1: DADOS ===
-const generateId = () => crypto.randomUUID();
-
-let boardState = [
-    {
-        id: "todo",
-        title: "A Fazer",
-        cards: [
-            { id: generateId(), content: "Configurar o projeto" },
-            { id: generateId(), content: "Estudar Drag and Drop" }
-        ]
-    },
-    { id: "doing", title: "Em Andamento", cards: [] },
-    { id: "done", title: "Concluído", cards: [] }
-];
-
-// === PASSO 2: LÓGICA DE EXIBIÇÃO ===
-function renderBoard() {
-    const boardElement = document.getElementById('kanban-board');
-    
-    boardElement.innerHTML = boardState.map(column => `
-        <div class="column">
-            <h3>${column.title}</h3>
-            <div class="card-list" id="${column.id}">
-                ${column.cards.map(card => `
-                    <div class="card" id="${card.id}" draggable="true">
-                        ${card.content}
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
+// 1. Quando o usuário começa a arrastar o card
+function handleDragStart(event) {
+    // Salva o ID do card que está sendo movido
+    event.dataTransfer.setData("text/plain", event.target.id);
+    console.log("Arrastando card:", event.target.id);
 }
 
-// Inicializa a tela
-window.onload = renderBoard;
-function renderBoard() {
-    console.log("Executando renderBoard..."); // Verifique se isso aparece no F12
-    const boardElement = document.getElementById('kanban-board');
+// 2. Quando o card é solto em uma coluna
+function handleDrop(event) {
+    event.preventDefault();
     
-    if (!boardElement) {
-        console.error("ERRO: Elemento kanban-board não encontrado!");
-        return;
+    // Pega o ID do card que salvamos no DragStart
+    const cardId = event.dataTransfer.getData("text/plain");
+    
+    // Descobre qual é a coluna de destino (onde o card foi solto)
+    // Usamos .closest() para garantir que pegamos a div da lista mesmo se soltar em cima de outro card
+    const targetColumnList = event.target.closest('.card-list');
+    
+    if (targetColumnList) {
+        const targetColumnId = targetColumnList.id;
+        moveCard(cardId, targetColumnId);
+    }
+}
+
+// 3. A lógica que altera os dados (boardState)
+function moveCard(cardId, targetColumnId) {
+    let cardToMove;
+    
+    // Remove o card da coluna atual
+    boardState.forEach(column => {
+        const cardIndex = column.cards.findIndex(c => c.id === cardId);
+        if (cardIndex !== -1) {
+            cardToMove = column.cards.splice(cardIndex, 1)[0];
+        }
+    });
+
+    // Adiciona o card na nova coluna
+    const targetColumn = boardState.find(col => col.id === targetColumnId);
+    if (targetColumn && cardToMove) {
+        targetColumn.cards.push(cardToMove);
     }
 
-    boardElement.innerHTML = boardState.map(column => `
-        <div class="column" style="background: #ebedf0; border-radius: 8px; margin: 10px; padding: 15px; width: 250px; min-height: 400px; float: left; font-family: sans-serif;">
-            <h3 style="margin-top: 0;">${column.title}</h3>
-            <div class="card-list" id="${column.id}" style="min-height: 20px;">
-                ${column.cards.map(card => `
-                    <div class="card" id="${card.id}" draggable="true" style="background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; padding: 10px; cursor: grab;">
-                        ${card.content}
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
+    // RE-RENDERIZA tudo para refletir a mudança na tela
+    renderBoard();
 }
-
-// Chame a função diretamente aqui também para garantir
-renderBoard();
