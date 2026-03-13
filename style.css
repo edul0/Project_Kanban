@@ -30,10 +30,7 @@ header {
     cursor: pointer;
     padding: 5px 10px;
     border-radius: 4px;
-    transition: background 0.2s;
 }
-
-.user-profile:hover { background: #f3f2f1; }
 
 .user-profile img {
     width: 32px;
@@ -92,11 +89,10 @@ header {
     border: 1px solid #edebe9;
     border-left: 4px solid #ccc;
     cursor: grab;
+    transition: transform 0.1s;
 }
 
-.column:nth-child(1) .card { border-left-color: #0078d4; }
-.column:nth-child(2) .card { border-left-color: #fbc02d; }
-.column:nth-child(3) .card { border-left-color: #107c10; }
+.card:active { transform: scale(0.98); }
 
 .card-footer {
     display: flex;
@@ -119,3 +115,17 @@ header {
     font-weight: 600;
     cursor: pointer;
 }
+
+/* ETIQUETAS DE PRIORIDADE */
+.priority-tag {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    display: inline-block;
+    margin-bottom: 8px;
+}
+.prio-alta { background: #fee2e2; color: #dc2626; }
+.prio-media { background: #fef3c7; color: #d97706; }
+.prio-baixa { background: #dcfce7; color: #16a34a; }
