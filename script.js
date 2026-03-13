@@ -1,95 +1,97 @@
-// === CONFIGURAÇÕES INICIAIS ===
 const generateId = () => crypto.randomUUID();
 
-// Tenta carregar dados do LocalStorage ou usa o padrão se estiver vazio
-let boardState = JSON.parse(localStorage.getItem('kanbanData')) || [
-    { id: "todo", title: "A Fazer", cards: [] },
-    { id: "doing", title: "Em Andamento", cards: [] },
+// 1. Carregamento de Dados (Individual por Usuário)
+let boardState = JSON.parse(localStorage.getItem('myPlannerData')) || [
+    { id: "todo", title: "Para fazer", cards: [] },
+    { id: "doing", title: "Em curso", cards: [] },
     { id: "done", title: "Concluído", cards: [] }
 ];
 
-// === FUNÇÕES DE PERSISTÊNCIA ===
-function saveToLocalStorage() {
-    localStorage.setItem('kanbanData', JSON.stringify(boardState));
+function save() {
+    localStorage.setItem('myPlannerData', JSON.stringify(boardState));
 }
 
-// === LÓGICA DE DRAG AND DROP ===
-function handleDragStart(event) {
-    event.dataTransfer.setData("text/plain", event.target.id);
-}
-
-function handleDragOver(event) {
-    event.preventDefault(); // Necessário para permitir o drop
-}
-
-function handleDrop(event) {
-    event.preventDefault();
-    const cardId = event.dataTransfer.getData("text/plain");
-    const targetColumnList = event.target.closest('.card-list');
+// 2. Sistema de Compartilhamento (O "Efeito Planner")
+function shareBoard() {
+    const dataString = btoa(JSON.stringify(boardState)); // Transforma em código Base64
+    const url = new URL(window.location.href);
+    url.searchParams.set('share', dataString);
     
-    if (targetColumnList) {
-        const targetColumnId = targetColumnList.id;
-        moveCard(cardId, targetColumnId);
-    }
+    navigator.clipboard.writeText(url.href);
+    alert("Link de compartilhamento copiado! Envie para seu colega.");
 }
 
-function moveCard(cardId, targetColumnId) {
-    let movedCard = null;
-
-    // Localiza e remove o card de onde ele estava
-    boardState.forEach(col => {
-        const cardIndex = col.cards.findIndex(c => c.id === cardId);
-        if (cardIndex !== -1) {
-            movedCard = col.cards.splice(cardIndex, 1)[0];
+// Verifica se recebeu um board via URL
+function checkSharedBoard() {
+    const params = new URLSearchParams(window.location.search);
+    const sharedData = params.get('share');
+    if (sharedData) {
+        if (confirm("Você recebeu um board compartilhado. Deseja substituir o seu atual por este?")) {
+            boardState = JSON.parse(atob(sharedData));
+            save();
+            window.history.replaceState({}, document.title, window.location.pathname); // Limpa a URL
         }
+    }
+}
+
+// 3. Drag and Drop e CRUD (Otimizados)
+function handleDragStart(e) { e.dataTransfer.setData("text", e.target.id); }
+function handleDragOver(e) { e.preventDefault(); }
+
+function handleDrop(e) {
+    e.preventDefault();
+    const cardId = e.dataTransfer.getData("text");
+    const targetCol = e.target.closest('.card-list');
+    if (targetCol) {
+        moveCard(cardId, targetCol.id);
+    }
+}
+
+function moveCard(cardId, targetColId) {
+    let card;
+    boardState.forEach(col => {
+        const idx = col.cards.findIndex(c => c.id === cardId);
+        if (idx !== -1) card = col.cards.splice(idx, 1)[0];
     });
-
-    // Adiciona na nova coluna
-    const destinationCol = boardState.find(col => col.id === targetColumnId);
-    if (destinationCol && movedCard) {
-        destinationCol.cards.push(movedCard);
-        saveToLocalStorage(); // Salva a nova posição
-        renderBoard();
+    
+    const dest = boardState.find(c => c.id === targetColId);
+    if (dest && card) {
+        dest.cards.push(card);
+        save();
+        render();
     }
 }
 
-// === CRIAÇÃO DE CARDS ===
-function addCard(columnId) {
-    const content = prompt("O que precisa ser feito?");
-    if (!content || content.trim() === "") return;
-
-    const column = boardState.find(col => col.id === columnId);
-    if (column) {
-        column.cards.push({ id: generateId(), content: content });
-        saveToLocalStorage(); // Salva o novo card
-        renderBoard();
-    }
+function addCard(colId) {
+    const val = prompt("O que precisa ser feito?");
+    if (!val) return;
+    boardState.find(c => c.id === colId).cards.push({id: generateId(), content: val});
+    save();
+    render();
 }
 
-// === RENDERIZAÇÃO ===
-function renderBoard() {
-    const boardElement = document.getElementById('kanban-board');
-    if (!boardElement) return;
-
-    boardElement.innerHTML = boardState.map(col => `
+// 4. Renderização (Design Planner)
+function render() {
+    const board = document.getElementById('kanban-board');
+    board.innerHTML = boardState.map(col => `
         <div class="column">
-            <h3>${col.title}</h3>
-            <div class="card-list" id="${col.id}" 
-                 ondragover="handleDragOver(event)" 
-                 ondrop="handleDrop(event)">
-                
+            <div class="column-header">
+                <h3>${col.title}</h3>
+                <span>${col.cards.length}</span>
+            </div>
+            <div class="card-list" id="${col.id}" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
                 ${col.cards.map(card => `
-                    <div class="card" id="${card.id}" draggable="true" 
-                         ondragstart="handleDragStart(event)">
+                    <div class="card" id="${card.id}" draggable="true" ondragstart="handleDragStart(event)">
                         ${card.content}
                     </div>
                 `).join('')}
-                
             </div>
-            <button class="add-btn" onclick="addCard('${col.id}')">+ Adicionar cartão</button>
+            <button class="btn-share" style="background:none; color:#2b88d8; text-align:left;" onclick="addCard('${col.id}')">+ Adicionar tarefa</button>
         </div>
     `).join('');
 }
 
-// Inicialização oficial
-document.addEventListener('DOMContentLoaded', renderBoard);
+document.addEventListener('DOMContentLoaded', () => {
+    checkSharedBoard();
+    render();
+});
