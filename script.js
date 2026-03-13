@@ -28,7 +28,7 @@ function renderLanding() {
     document.getElementById('app-container').innerHTML = `
         <div class="landing-page" style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;">
             <img src="marca.png" width="100">
-            <h1>KSpace /</h1>
+            <h1>KSpace</h1>
             <input type="text" id="room-input" placeholder="nome-da-sala" style="font-size:2rem; text-align:center; border:none; border-bottom:3px solid #000; outline:none;">
         </div>`;
     document.getElementById('room-input').addEventListener('keypress', (e) => {
