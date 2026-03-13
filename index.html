@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanban Space| Post-it Board</title>
+    <title>KanbanSpace | Post-it Board </title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
@@ -19,6 +19,7 @@
             </div>
             <div class="search-container">
                 <input type="text" id="board-search" placeholder="Buscar post-its..." oninput="renderBoard()">
+                <button class="btn-filter-me" onclick="toggleMyTasks()">Ver só os meus</button>
             </div>
         </div>
         <div class="actions">
