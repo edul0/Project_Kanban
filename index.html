@@ -1,11 +1,23 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planner Pro | GitHub Ecosystem</title>
+    <link rel="stylesheet" href="style.css">
+</head>
 <body>
     <header>
-        <h1>Project Kanban</h1>
-        <div class="actions-bar">
-            <button class="btn-share" onclick="shareBoard()">Compartilhar Board</button>
+        <div class="user-profile" id="user-profile">
+            <span>Carregando dev...</span>
+        </div>
+        <div class="actions">
+            <button class="btn-share" onclick="shareBoard()">Compartilhar Plano</button>
         </div>
     </header>
 
     <main id="kanban-board" class="board-container"></main>
-    <script src="script.js"></script>
+
+    <script src="script.js" defer></script>
 </body>
+</html>
