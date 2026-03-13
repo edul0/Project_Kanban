@@ -7,12 +7,11 @@ let ROOM_NAME = urlParams.get('sala');
 let GITHUB_USER = localStorage.getItem('kanban_user') || 'edul0';
 let currentUser = { login: GITHUB_USER, avatar: `https://github.com/${GITHUB_USER}.png` };
 let boardState = [];
+let activityLogs = [];
 
 async function startApp() {
-    if (!ROOM_NAME) {
-        renderLanding();
-    } else {
-        // ESSENCIAL: Carrega o perfil ANTES de desenhar o board
+    if (!ROOM_NAME) { renderLanding(); } 
+    else {
         await fetchUserProfile(GITHUB_USER);
         renderMuralSkeleton();
         initRoom();
@@ -20,14 +19,13 @@ async function startApp() {
 }
 
 function renderLanding() {
-    document.getElementById('app-container').innerHTML = `
+    document.body.innerHTML = `
         <div class="landing-page">
-            <h1>KANBANSPACE</h1>
+            <h1>KanbanSpace</h1>
             <input type="text" id="room-input" placeholder="nome-da-sala" autofocus>
         </div>`;
-    const input = document.getElementById('room-input');
-    input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && input.value) window.location.href = `?sala=${input.value.trim()}`;
+    document.getElementById('room-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && e.target.value) window.location.href = `?sala=${e.target.value.trim()}`;
     });
 }
 
@@ -35,33 +33,35 @@ function renderMuralSkeleton() {
     document.getElementById('app-container').innerHTML = `
         <header>
             <div class="header-left">
-                <div class="user-profile" id="user-display" onclick="changeUser()">
-                    <img src="${currentUser.avatar}"> <span>${currentUser.login}</span>
-                </div>
-                <div class="room-info" onclick="window.location.href='index.html'">
-                    Mural: <strong>${ROOM_NAME}</strong>
-                </div>
-                <input type="text" id="board-search" placeholder="Buscar..." oninput="renderBoard()" style="padding: 5px 10px; border-radius: 15px; border: 1px solid #ccc; outline: none; margin-left: 10px;">
+                <div class="user-profile" onclick="changeUser()"><img src="${currentUser.avatar}"> <span>${currentUser.login}</span></div>
+                <div class="room-info" onclick="window.location.href='index.html'">Mural: <strong>${ROOM_NAME}</strong></div>
+                <input type="text" id="board-search" placeholder="Buscar..." oninput="renderBoard()" style="padding:5px 10px; border-radius:15px; border:1px solid #ccc; outline:none; margin-left:10px;">
+            </div>
+            <div class="actions">
+                <button onclick="shareBoard()" style="padding:8px 15px; background:#000; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Compartilhar Link</button>
             </div>
         </header>
         <main id="kanban-board" class="board-container"></main>
-    `;
+        <div class="side-panel">
+            <div class="panel-header">Status <span id="stats-content">0%</span></div>
+            <div class="panel-header">Histórico <button onclick="clearLogs()" style="border:none; background:transparent; cursor:pointer;">🗑️</button></div>
+            <div id="log-content"></div>
+        </div>`;
 }
 
 async function initRoom() {
     let { data } = await _supabase.from('kanban_data').select('*').eq('room_name', ROOM_NAME).maybeSingle();
-
     if (!data) {
         const initialState = [{id:"todo", title:"Para fazer", cards:[]},{id:"doing", title:"Em curso", cards:[]},{id:"done", title:"Concluído", cards:[]}];
         const { data: newData } = await _supabase.from('kanban_data').insert([{ room_name: ROOM_NAME, state: initialState, logs: [] }]).select().single();
         data = newData;
     }
-
     boardState = data.state;
-    renderBoard();
-
+    activityLogs = data.logs || [];
+    renderBoard(); renderLogs();
+    
     _supabase.channel(`room-${ROOM_NAME}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'kanban_data', filter: `room_name=eq.${ROOM_NAME}` }, 
-    payload => { boardState = payload.new.state; renderBoard(); }).subscribe();
+    payload => { boardState = payload.new.state; activityLogs = payload.new.logs || []; renderBoard(); renderLogs(); }).subscribe();
 }
 
 function renderBoard() {
@@ -69,26 +69,25 @@ function renderBoard() {
     if (!board) return;
     const search = document.getElementById('board-search').value.toLowerCase();
     
-    board.innerHTML = boardState.map(col => {
-        const filteredCards = col.cards.filter(c => c.content.toLowerCase().includes(search));
-        return `
+    board.innerHTML = boardState.map(col => `
         <div class="column">
-            <div class="column-header">${col.title} (${filteredCards.length})</div>
+            <div class="column-header">${col.title} (${col.cards.length})</div>
             <div class="card-list" ondragover="event.preventDefault()" ondrop="drop(event, '${col.id}')">
-                ${filteredCards.map(card => `
+                ${col.cards.filter(c => c.content.toLowerCase().includes(search)).map(card => `
                     <div class="card ${card.priorityClass || 'prio-media'}" id="${card.id}" draggable="true" ondragstart="drag(event)" ondblclick="deleteCard('${card.id}')">
                         <div class="card-content">${card.content}</div>
+                        ${card.imageUrl ? `<img src="${card.imageUrl}" class="attached-image">` : ''}
+                        <div style="font-size:9px; color:var(--primary); margin-top:10px; cursor:pointer; opacity:0.5" onclick="attachImage('${card.id}')">🖼️ Anexar Imagem</div>
                         <div class="card-footer">
                             <div class="owner-info" onclick="assignTask('${card.id}')">
-                                <img src="${card.ownerAvatar || 'https://github.com/identicons/ghost.png'}">
+                                <img src="${card.ownerAvatar || 'https://github.com/' + (card.owner || 'ghost') + '.png'}" onerror="this.src='https://github.com/identicons/ghost.png'">
                                 <span>@${card.owner || currentUser.login}</span>
                             </div>
                         </div>
                     </div>`).join('')}
             </div>
             <button class="add-btn" onclick="addCard('${col.id}')">+ Novo Post-it</button>
-        </div>`;
-    }).join('');
+        </div>`).join('');
 }
 
 async function addCard(colId) {
@@ -98,51 +97,41 @@ async function addCard(colId) {
     
     boardState.find(c => c.id === colId).cards.push({ 
         id: crypto.randomUUID(), content: txt, owner: currentUser.login, 
-        ownerAvatar: currentUser.avatar, priorityClass: prio 
+        ownerAvatar: currentUser.avatar, priorityClass: prio, imageUrl: null 
     });
-    renderBoard(); await save();
+    renderBoard(); await save(`@${currentUser.login} criou card`);
 }
 
-async function assignTask(cardId) {
-    const target = prompt("Delegar para (@nick ou 'eu'):", "eu");
-    if (!target) return;
-    const nick = target.toLowerCase() === 'eu' ? currentUser.login : target.replace('@', '');
-    boardState.forEach(col => {
-        const card = col.cards.find(c => c.id === cardId);
-        if (card) { card.owner = nick; card.ownerAvatar = `https://github.com/${nick}.png`; }
-    });
-    renderBoard(); await save();
+async function attachImage(cardId) {
+    const url = prompt("URL da Imagem:"); if (!url) return;
+    boardState.forEach(col => { const c = col.cards.find(x => x.id === cardId); if (c) c.imageUrl = url; });
+    renderBoard(); await save(`@${currentUser.login} anexou imagem`);
 }
 
-async function save() { 
-    await _supabase.from('kanban_data').update({ state: boardState }).eq('room_name', ROOM_NAME); 
+async function save(logMsg) {
+    if (logMsg) activityLogs.unshift({ msg: logMsg, time: new Date().toLocaleTimeString() });
+    await _supabase.from('kanban_data').update({ state: boardState, logs: activityLogs }).eq('room_name', ROOM_NAME);
 }
 
+function renderLogs() {
+    const lc = document.getElementById('log-content');
+    if(lc) lc.innerHTML = activityLogs.map(l => `<div style="margin-bottom:5px; border-bottom:1px dashed #eee;">[${l.time}] ${l.msg}</div>`).join('');
+    const ok = boardState.find(c => c.id === 'done')?.cards.length || 0;
+    const tot = boardState.reduce((a, c) => a + c.cards.length, 0);
+    const st = document.getElementById('stats-content');
+    if(st) st.innerText = `${tot > 0 ? Math.round((ok/tot)*100) : 0}%`;
+}
+
+async function fetchUserProfile(u) { try { const r = await fetch(`https://api.github.com/users/${u}`); const d = await r.json(); if(d.login) currentUser = { login: d.login, avatar: d.avatar_url }; } catch(e) {} }
+function changeUser() { const u = prompt("GitHub User:"); if(u) { localStorage.setItem('kanban_user', u); location.reload(); } }
+function shareBoard() { navigator.clipboard.writeText(window.location.href); alert("Link copiado!"); }
+async function deleteCard(id) { if(confirm("Deletar?")) { boardState.forEach(c => c.cards = c.cards.filter(x => x.id !== id)); renderBoard(); await save(`Removido`); } }
 function drag(e) { e.dataTransfer.setData("text", e.target.id); }
 async function drop(e, colId) {
     const id = e.dataTransfer.getData("text"); let card;
     boardState.forEach(c => { const i = c.cards.findIndex(x => x.id === id); if(i > -1) card = c.cards.splice(i, 1)[0]; });
-    if(card) { boardState.find(c => c.id === colId).cards.push(card); renderBoard(); await save(); }
+    if(card) { boardState.find(c => c.id === colId).cards.push(card); renderBoard(); await save(`Movido`); }
 }
-
-async function fetchUserProfile(u) {
-    try {
-        const r = await fetch(`https://api.github.com/users/${u}`);
-        const d = await r.json();
-        if(d.login) currentUser = { login: d.login, avatar: d.avatar_url };
-    } catch(e) { console.log("Erro GitHub"); }
-}
-
-function changeUser() { 
-    const u = prompt("GitHub User:"); 
-    if(u) { localStorage.setItem('kanban_user', u); location.reload(); } 
-}
-
-async function deleteCard(id) { 
-    if(confirm("Deletar?")) { 
-        boardState.forEach(c => c.cards = c.cards.filter(x => x.id !== id)); 
-        renderBoard(); await save(); 
-    } 
-}
+async function assignTask(cardId) { const target = prompt("Delegar para:"); if(!target) return; const nick = target.toLowerCase() === 'eu' ? currentUser.login : target.replace('@', ''); boardState.forEach(col => { const c = col.cards.find(x => x.id === cardId); if (c) { c.owner = nick; c.ownerAvatar = `https://github.com/${nick}.png`; } }); renderBoard(); await save(`Delegado para @${nick}`); }
 
 document.addEventListener('DOMContentLoaded', startApp);
